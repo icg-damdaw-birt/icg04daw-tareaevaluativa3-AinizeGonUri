@@ -99,6 +99,40 @@ export const moviesStore = {
     }
   },
 
+  // Calificar una película (rating 0-5)
+  async rateMovie(id: string, rating: number): Promise<boolean> {
+    mutating = true;
+    error = null;
+    
+    // Guardar el rating original ANTES de modificar movies (necesario para rollback)
+    const oldMovie = movies.find(m => m.id === id);
+    const oldRating = oldMovie?.rating;
+    
+    try {
+      // Validación: rating debe estar entre 0 y 5
+      if (!Number.isInteger(rating) || rating < 0 || rating > 5) {
+        error = 'El rating debe ser un número entero entre 0 y 5';
+        mutating = false;
+        return false;
+      }
+
+      // Optimistic update: cambiar el rating inmediatamente
+      movies = movies.map(m => m.id === id ? { ...m, rating } : m);
+
+      // Llamar a la API
+      const updatedMovie = await api.rateMovie(id, rating);
+      movies = movies.map(m => m.id === id ? updatedMovie : m);
+      return true;
+    } catch (err) {
+      // Rollback en caso de error: usar oldRating guardado
+      movies = movies.map(m => m.id === id ? { ...m, rating: oldRating } : m);
+      error = err instanceof Error ? err.message : 'Error al calificar película';
+      return false;
+    } finally {
+      mutating = false;
+    }
+  },
+
   // Limpiar estado completo
   reset() {
     movies = [];

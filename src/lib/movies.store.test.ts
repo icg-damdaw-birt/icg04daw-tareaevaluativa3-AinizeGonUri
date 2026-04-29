@@ -18,6 +18,7 @@ vi.mock('./api.service', () => ({
     updateMovie: vi.fn(),
     deleteMovie: vi.fn(),
     toggleFavorite: vi.fn(),
+    rateMovie: vi.fn(),
   }
 }));
 
@@ -297,6 +298,107 @@ describe('Movies Store (Svelte 5 Runes)', () => {
       expect(moviesStore.mutating).toBe(false);
     });
   });
+
+  // ─── rateMovie ─────────────────────────────────────────────────
+  describe('rateMovie()', () => {
+    it('debería calificar una película correctamente', async () => {
+      // ARRANGE
+      vi.mocked(api.getMovies).mockResolvedValue([...mockMovies]);
+      await moviesStore.loadMovies();
+
+      const movieWithRating: Movie = { ...mockMovies[0], rating: 4 };
+      vi.mocked(api.rateMovie).mockResolvedValue(movieWithRating);
+
+      // ACT
+      const ok = await moviesStore.rateMovie('1', 4);
+
+      // ASSERT
+      expect(api.rateMovie).toHaveBeenCalledWith('1', 4);
+      expect(ok).toBe(true);
+
+      const movie = moviesStore.movies.find(m => m.id === '1');
+      expect(movie?.rating).toBe(4);
+    });
+
+    it('debería validar que rating esté entre 0 y 5', async () => {
+      // Rating negativo
+      let ok = await moviesStore.rateMovie('1', -1);
+      expect(ok).toBe(false);
+      expect(moviesStore.error).toContain('entre 0 y 5');
+
+      // Rating > 5
+      moviesStore.clearError();
+      ok = await moviesStore.rateMovie('1', 6);
+      expect(ok).toBe(false);
+      expect(moviesStore.error).toContain('entre 0 y 5');
+
+      // Rating no entero
+      moviesStore.clearError();
+      ok = await moviesStore.rateMovie('1', 3.5);
+      expect(ok).toBe(false);
+      expect(moviesStore.error).toContain('entre 0 y 5');
+    });
+
+    it('debería permitir rating 0 y 5', async () => {
+      vi.mocked(api.getMovies).mockResolvedValue([...mockMovies]);
+      await moviesStore.loadMovies();
+
+      // Rating 0
+      const movieWithZeroRating: Movie = { ...mockMovies[0], rating: 0 };
+      vi.mocked(api.rateMovie).mockResolvedValue(movieWithZeroRating);
+
+      let ok = await moviesStore.rateMovie('1', 0);
+      expect(ok).toBe(true);
+      expect(moviesStore.movies.find(m => m.id === '1')?.rating).toBe(0);
+
+      // Rating 5
+      const movieWithMaxRating: Movie = { ...mockMovies[0], rating: 5 };
+      vi.mocked(api.rateMovie).mockResolvedValue(movieWithMaxRating);
+
+      ok = await moviesStore.rateMovie('1', 5);
+      expect(ok).toBe(true);
+      expect(moviesStore.movies.find(m => m.id === '1')?.rating).toBe(5);
+    });
+
+    it('debería hacer optimistic update', async () => {
+      vi.mocked(api.getMovies).mockResolvedValue([...mockMovies]);
+      await moviesStore.loadMovies();
+
+      const movieWithRating: Movie = { ...mockMovies[0], rating: 3 };
+      vi.mocked(api.rateMovie).mockResolvedValue(movieWithRating);
+
+      // ACT
+      await moviesStore.rateMovie('1', 3);
+
+      // ASSERT: el rating se actualiza inmediatamente
+      const movieDuringUpdate = moviesStore.movies.find(m => m.id === '1');
+      expect(movieDuringUpdate?.rating).toBe(3);
+    });
+
+    it('debería hacer rollback si la API falla', async () => {
+      vi.mocked(api.getMovies).mockResolvedValue([...mockMovies]);
+      await moviesStore.loadMovies();
+
+      const originalRating = moviesStore.movies.find(m => m.id === '1')?.rating;
+      vi.mocked(api.rateMovie).mockRejectedValue(new Error('Server error'));
+
+      // ACT
+      const ok = await moviesStore.rateMovie('1', 5);
+
+      // ASSERT
+      expect(ok).toBe(false);
+      expect(moviesStore.error).toBe('Server error');
+      expect(moviesStore.movies.find(m => m.id === '1')?.rating).toBe(originalRating);
+    });
+
+    it('debería poner mutating=false al terminar', async () => {
+      vi.mocked(api.rateMovie).mockResolvedValue({ ...mockMovies[0], rating: 3 });
+
+      await moviesStore.rateMovie('1', 3);
+
+      expect(moviesStore.mutating).toBe(false);
+    });
+  });
 });
 
 /**
@@ -304,7 +406,7 @@ describe('Movies Store (Svelte 5 Runes)', () => {
  * 
  * 1. Mock de api (no apiService)
  *    - El store importa { api } de './api.service'
- *    - Mockeamos cada método: getMovies, createMovie, updateMovie, deleteMovie, toggleFavorite
+ *    - Mockeamos cada método: getMovies, createMovie, updateMovie, deleteMovie, toggleFavorite, rateMovie
  * 
  * 2. IDs son strings
  *    - La interfaz Movie usa id: string (viene del backend MongoDB/UUID)
