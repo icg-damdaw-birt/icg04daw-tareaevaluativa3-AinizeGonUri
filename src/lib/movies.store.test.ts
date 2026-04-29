@@ -17,6 +17,7 @@ vi.mock('./api.service', () => ({
     createMovie: vi.fn(),
     updateMovie: vi.fn(),
     deleteMovie: vi.fn(),
+    toggleFavorite: vi.fn(),
   }
 }));
 
@@ -221,6 +222,81 @@ describe('Movies Store (Svelte 5 Runes)', () => {
       expect(moviesStore.mutating).toBe(false);
     });
   });
+
+  // ─── toggleFavorite ───────────────────────────────────────────
+  describe('toggleFavorite()', () => {
+    it('debería togglear favorito de false a true', async () => {
+      // ARRANGE
+      vi.mocked(api.getMovies).mockResolvedValue([...mockMovies]);
+      await moviesStore.loadMovies();
+
+      const movieWithFavorite: Movie = { ...mockMovies[0], isFavorite: true };
+      vi.mocked(api.toggleFavorite).mockResolvedValue(movieWithFavorite);
+
+      // ACT
+      const ok = await moviesStore.toggleFavorite('1');
+
+      // ASSERT
+      expect(api.toggleFavorite).toHaveBeenCalledWith('1');
+      expect(ok).toBe(true);
+
+      const movie = moviesStore.movies.find(m => m.id === '1');
+      expect(movie?.isFavorite).toBe(true);
+    });
+
+    it('debería togglear favorito de true a false', async () => {
+      // ARRANGE
+      const movieWithFavorite: Movie = { ...mockMovies[0], isFavorite: true };
+      vi.mocked(api.getMovies).mockResolvedValue([movieWithFavorite, ...mockMovies.slice(1)]);
+      await moviesStore.loadMovies();
+
+      const movieWithoutFavorite: Movie = { ...movieWithFavorite, isFavorite: false };
+      vi.mocked(api.toggleFavorite).mockResolvedValue(movieWithoutFavorite);
+
+      // ACT
+      const ok = await moviesStore.toggleFavorite('1');
+
+      // ASSERT
+      expect(ok).toBe(true);
+
+      const movie = moviesStore.movies.find(m => m.id === '1');
+      expect(movie?.isFavorite).toBe(false);
+    });
+
+    it('debería mantener el número de películas al togglear favorito', async () => {
+      vi.mocked(api.getMovies).mockResolvedValue([...mockMovies]);
+      await moviesStore.loadMovies();
+      const initialCount = moviesStore.movies.length;
+
+      const movieWithFavorite: Movie = { ...mockMovies[0], isFavorite: true };
+      vi.mocked(api.toggleFavorite).mockResolvedValue(movieWithFavorite);
+      await moviesStore.toggleFavorite('1');
+
+      expect(moviesStore.movies.length).toBe(initialCount);
+    });
+
+    it('debería poner mutating=false y error=null al terminar con éxito', async () => {
+      vi.mocked(api.getMovies).mockResolvedValue([...mockMovies]);
+      await moviesStore.loadMovies();
+
+      const movieWithFavorite: Movie = { ...mockMovies[0], isFavorite: true };
+      vi.mocked(api.toggleFavorite).mockResolvedValue(movieWithFavorite);
+      await moviesStore.toggleFavorite('1');
+
+      expect(moviesStore.mutating).toBe(false);
+      expect(moviesStore.error).toBeNull();
+    });
+
+    it('debería manejar error al togglear favorito', async () => {
+      vi.mocked(api.toggleFavorite).mockRejectedValue(new Error('Movie not found'));
+
+      const ok = await moviesStore.toggleFavorite('999');
+
+      expect(ok).toBe(false);
+      expect(moviesStore.error).toBe('Movie not found');
+      expect(moviesStore.mutating).toBe(false);
+    });
+  });
 });
 
 /**
@@ -228,7 +304,7 @@ describe('Movies Store (Svelte 5 Runes)', () => {
  * 
  * 1. Mock de api (no apiService)
  *    - El store importa { api } de './api.service'
- *    - Mockeamos cada método: getMovies, createMovie, updateMovie, deleteMovie
+ *    - Mockeamos cada método: getMovies, createMovie, updateMovie, deleteMovie, toggleFavorite
  * 
  * 2. IDs son strings
  *    - La interfaz Movie usa id: string (viene del backend MongoDB/UUID)

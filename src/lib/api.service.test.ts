@@ -289,6 +289,149 @@ describe('API Service - Autenticación', () => {
       }
     });
   });
+
+  // ==========================================
+  // GRUPO: Películas - Favoritos
+  // ==========================================
+  describe('Películas - Favoritos', () => {
+    const mockMovie = {
+      id: 'movie-123',
+      title: 'Inception',
+      director: 'Christopher Nolan',
+      year: 2010,
+      posterUrl: 'https://example.com/poster.jpg',
+      isFavorite: false,
+      createdAt: '2025-01-01T00:00:00Z',
+      updatedAt: '2025-01-01T00:00:00Z',
+    };
+
+    beforeEach(() => {
+      // Asegurar que hay token autenticado
+      authToken.set('valid-token');
+    });
+
+    it('debería togglear favorito correctamente (false → true)', async () => {
+      // ARRANGE
+      const movieId = 'movie-123';
+      const updatedMovie = { ...mockMovie, isFavorite: true };
+
+      (globalThis.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/json' : null
+        },
+        json: async () => updatedMovie
+      });
+
+      // ACT
+      const response = await api.toggleFavorite(movieId);
+
+      // ASSERT
+      expect(response.isFavorite).toBe(true);
+      expect(response.id).toBe(movieId);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+      const callArgs = (globalThis.fetch as any).mock.calls[0];
+      expect(callArgs[0]).toBe(`http://localhost:3000/api/movies/${movieId}/favorite`);
+      expect(callArgs[1].method).toBe('PATCH');
+    });
+
+    it('debería togglear favorito correctamente (true → false)', async () => {
+      // ARRANGE
+      const movieId = 'movie-456';
+      const favoriteMovie = { ...mockMovie, id: movieId, isFavorite: true };
+      const updatedMovie = { ...favoriteMovie, isFavorite: false };
+
+      (globalThis.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/json' : null
+        },
+        json: async () => updatedMovie
+      });
+
+      // ACT
+      const response = await api.toggleFavorite(movieId);
+
+      // ASSERT
+      expect(response.isFavorite).toBe(false);
+      expect(response.id).toBe(movieId);
+    });
+
+    it('debería fallar si la película no existe (404)', async () => {
+      // ARRANGE
+      const movieId = 'non-existent-id';
+
+      (globalThis.fetch as any).mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/json' : null
+        },
+        json: async () => ({ error: 'Película no encontrada' })
+      });
+
+      // ACT & ASSERT
+      try {
+        await api.toggleFavorite(movieId);
+        expect(true).toBe(false);
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(404);
+        expect((error as ApiError).message).toBe('Película no encontrada');
+      }
+    });
+
+    it('debería fallar si hay error del servidor (500)', async () => {
+      // ARRANGE
+      const movieId = 'movie-123';
+
+      (globalThis.fetch as any).mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/json' : null
+        },
+        json: async () => ({ error: 'Error al actualizar favorito' })
+      });
+
+      // ACT & ASSERT
+      try {
+        await api.toggleFavorite(movieId);
+        expect(true).toBe(false);
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApiError);
+        expect((error as ApiError).status).toBe(500);
+        expect((error as ApiError).message).toBe('Error al actualizar favorito');
+      }
+    });
+
+    it('debería incluir token de autenticación en la solicitud', async () => {
+      // ARRANGE
+      const token = 'my-jwt-token';
+      authToken.set(token);
+      const movieId = 'movie-123';
+
+      (globalThis.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name: string) => name === 'content-type' ? 'application/json' : null
+        },
+        json: async () => ({ ...mockMovie, isFavorite: true })
+      });
+
+      // ACT
+      await api.toggleFavorite(movieId);
+
+      // ASSERT
+      const callArgs = (globalThis.fetch as any).mock.calls[0];
+      const headers = callArgs[1].headers as Headers;
+      expect(headers.get('Authorization')).toBe(`Bearer ${token}`);
+    });
+  });
 });
 
 /**
