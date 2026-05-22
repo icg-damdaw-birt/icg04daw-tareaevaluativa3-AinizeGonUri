@@ -9,7 +9,7 @@ import type {
 } from './types';
 
 // Configuración base del servicio API
-const FALLBACK_API_URL = 'http://localhost:3000';
+const FALLBACK_API_URL = 'https://mivideoteca-backend-ainizegonuri.onrender.com';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
